@@ -183,8 +183,7 @@ devweave/
 └── SYSTEM_DESIGN_AND_INTERVIEW_GUIDE.md
 ```
 
-For implementation details, tradeoffs, event flows, and interview talking points, see
-[SYSTEM_DESIGN_AND_INTERVIEW_GUIDE.md](./SYSTEM_DESIGN_AND_INTERVIEW_GUIDE.md).
+
 
 ---
 
