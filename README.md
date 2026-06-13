@@ -1,147 +1,202 @@
 # DevWeave
 
-**Real-time collaborative code editor** — multiple developers edit the same document with conflict-free merges (Yjs CRDT), live cursors, presence, room chat, in-browser JavaScript execution, persistent accounts, and full version history.
+<div align="center">
+
+### A distributed, real-time code editor built for conflict-free collaboration
+
+Edit together in Monaco, watch remote cursors move live, restore shared code without
+disconnecting collaborators, and scale WebSocket traffic across Node.js instances.
+
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js-Express-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Yjs](https://img.shields.io/badge/Sync-Yjs_CRDT-f5ab00)](https://yjs.dev/)
+[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Realtime-Redis-DC382D?logo=redis&logoColor=white)](https://redis.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
+**[Architecture](#architecture) · [Engineering Highlights](#engineering-highlights) · [Quick Start](#quick-start) · [API](#api)**
+
+</div>
 
 ---
 
-## ✨ Highlights
+## Engineering Highlights
 
-- **Conflict-free collaborative editing** — Yjs CRDT + `y-monaco` keep every collaborator's cursor and edits in sync without merge conflicts
-- **Authentication** — JWT-based signup/login with bcrypt password hashing; accounts store a real display name used in collaboration presence
-- **My Documents dashboard** — Logged-in users land on `/dashboard`, can list owned documents, rename them, delete them, or create a new document
-- **Persistent storage** — Documents, users, and version history now live in **PostgreSQL** (via Prisma), replacing the old Redis-only model
-- **Version history** — Owner-only manual "Save Version" snapshots, automatic 5-minute auto-snapshots, and one-click restore that broadcasts the authoritative Yjs state to all collaborators live
-- **Live presence & cursors** — See who's in the room and where their cursor is, in real time
-- **Room chat** — Built-in chat per document
-- **In-browser JS execution** — Run code sandboxed with VM2, no local setup needed
-- **Welcome flow** — First visit offers Login, Sign up, or Guest; guests enter a display name and join an existing shared document
-- **Authenticated creation** — Only logged-in users can create documents; guests can collaborate through valid owner-created links
-- **Scale-out ready** — Redis Pub/Sub + Socket.IO adapter support multi-instance deployments
+### Conflict-free editing, not last-write-wins
+
+DevWeave binds Monaco to a shared `Y.Text` through `y-monaco`. Each keystroke is
+transmitted as a compact Yjs update, so simultaneous edits converge without locks,
+manual conflict resolution, or full-document overwrites.
+
+### Live restore without breaking the room
+
+Owners can create snapshots manually or rely on automatic five-minute snapshots.
+Restoring a version replaces the server's live Yjs state, persists it, and broadcasts
+the authoritative update to every connected client. Everyone stays in the session and
+continues editing from the restored state.
+
+### Realtime and durable data have separate jobs
+
+PostgreSQL is the source of truth for users, documents, ownership, and version history.
+Redis handles fast, ephemeral work: Pub/Sub fan-out, Socket.IO's multi-instance adapter,
+presence, and chat. This avoids forcing one database to solve two different problems.
+
+### Designed for horizontal WebSocket scaling
+
+The Socket.IO Redis adapter carries room broadcasts across backend instances, while
+application-level Pub/Sub distributes Yjs updates and realtime events. Each instance
+maintains an in-memory `Y.Doc` that converges from the same CRDT update stream and can
+rehydrate from PostgreSQL after a restart.
+
+### More than an editor demo
+
+DevWeave includes JWT authentication, bcrypt password hashing, document ownership and
+CRUD, guest link sharing, live cursors, presence, room chat, version history, and
+server-side JavaScript execution in a VM2 sandbox.
 
 ---
 
 ## Architecture
 
 ```mermaid
-flowchart TB
-  subgraph Browser["Browser (React)"]
-    App[App.js / React Router]
-    Auth[Login / Signup]
-    Dashboard[Dashboard / My Documents]
-    Editor[Monaco + y-monaco]
-    Yjs[Y.Doc / Y.Text]
-    SocketC[socket.io-client]
-    VH[Version History UI]
-    App --> Editor
-    App --> Auth
-    App --> Dashboard
-    Editor --> Yjs
-    Yjs --> SocketC
-    VH --> SocketC
-  end
+flowchart LR
+    User((Developer))
 
-  subgraph Server["Node.js (Express + Socket.IO)"]
-    Routes[REST /api]
-    AuthSvc[Auth Service - JWT/bcrypt]
-    Handlers[Socket handlers]
-    Services[Services layer]
-    VersionSvc[Version Service]
-    Routes --> AuthSvc
-    Routes --> Services
-    Handlers --> Services
-    Services --> VersionSvc
-  end
+    subgraph Client["CLIENT · React"]
+        direction TB
+        UI["Dashboard & Auth"]
+        Monaco["Monaco Editor"]
+        YClient["Yjs + y-monaco"]
+        Realtime["Socket.IO Client"]
+        History["Version History"]
 
-  subgraph Postgres["PostgreSQL (Prisma)"]
-    Users[(Users)]
-    Docs[(Documents)]
-    Versions[(DocumentVersions)]
-  end
+        UI --> Monaco
+        Monaco <--> YClient
+        YClient <--> Realtime
+    end
 
-  subgraph Redis["Redis"]
-    PS[Pub/Sub]
-    Adapter[Socket.IO adapter]
-    Presence[Presence / Chat]
-  end
+    subgraph API["APPLICATION · Node.js"]
+        direction TB
+        Express["Express REST API"]
+        Auth["JWT Auth & Ownership"]
+        Socket["Socket.IO Handlers"]
+        Services["Document & Version Services"]
+        YServer["In-memory Y.Doc Cache"]
 
-  SocketC <-->|WebSocket| Handlers
-  Services --> Docs
-  Services --> Users
-  VersionSvc --> Versions
-  Handlers --> Adapter
-  Handlers --> PS
-  Handlers --> Presence
+        Express --> Auth --> Services
+        Socket <--> YServer
+        Socket --> Services
+    end
+
+    subgraph Data["DURABLE STATE"]
+        Postgres[("PostgreSQL")]
+        Prisma["Prisma ORM"]
+        Prisma --> Postgres
+    end
+
+    subgraph RT["REALTIME INFRASTRUCTURE"]
+        Redis[("Redis")]
+        PubSub["Pub/Sub"]
+        Adapter["Socket.IO Adapter"]
+        Ephemeral["Presence & Chat"]
+
+        Redis --- PubSub
+        Redis --- Adapter
+        Redis --- Ephemeral
+    end
+
+    User --> Client
+    UI <-->|"HTTPS · JWT"| Express
+    History <-->|"Snapshots & restore"| Express
+    Realtime <-->|"WebSocket · Yjs updates"| Socket
+    Services <-->|"Documents · users · versions"| Prisma
+    YServer -->|"Debounced persistence"| Prisma
+    Socket <-->|"Cross-instance fan-out"| PubSub
+    Socket <-->|"Room broadcasts"| Adapter
+    Socket <-->|"Ephemeral state"| Ephemeral
+
+    classDef client fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e,stroke-width:2px;
+    classDef server fill:#ede9fe,stroke:#7c3aed,color:#4c1d95,stroke-width:2px;
+    classDef database fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px;
+    classDef realtime fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-width:2px;
+    classDef actor fill:#fef3c7,stroke:#d97706,color:#78350f,stroke-width:2px;
+
+    class UI,Monaco,YClient,Realtime,History client;
+    class Express,Auth,Socket,Services,YServer server;
+    class Postgres,Prisma database;
+    class Redis,PubSub,Adapter,Ephemeral realtime;
+    class User actor;
 ```
+
+### What happens after a keystroke?
+
+1. `y-monaco` converts the Monaco edit into a Yjs update.
+2. The client sends the binary update through Socket.IO.
+3. The backend merges it into its in-memory `Y.Doc` and publishes it through Redis.
+4. Other backend instances forward the update to collaborators in the same room.
+5. Yjs applies updates in any arrival order and all replicas converge.
+6. The merged document and encoded Yjs state are persisted to PostgreSQL after a short debounce.
 
 ---
 
-## Tech stack
+## Product Experience
+
+| Capability | How it works |
+|---|---|
+| Collaborative editor | Monaco + Yjs CRDT + `y-monaco` |
+| Live awareness | Remote cursors, selections, presence, and room chat |
+| Version safety | Manual snapshots, five-minute auto-snapshots, live restore |
+| Accounts | JWT signup/login with bcrypt password hashing |
+| Document workspace | Create, rename, delete, list, and open owned documents |
+| Guest collaboration | Join an existing document through a shared link |
+| Code execution | JavaScript runs on the backend in a VM2 sandbox |
+| Multi-instance delivery | Redis Pub/Sub + Socket.IO Redis adapter |
+
+---
+
+## Tech Stack
 
 | Layer | Technologies |
-|-------|----------------|
-| Frontend | React, React Router, Monaco Editor, Yjs, y-monaco, Tailwind CSS, Socket.IO client |
-| Backend | Node.js, Express, Socket.IO, Joi, VM2 (sandboxed JS execution), JWT, bcrypt |
-| Database | PostgreSQL via Prisma ORM (users, documents, version history) |
-| Realtime infra | Redis (Pub/Sub, Socket.IO adapter, presence, chat) |
+|---|---|
+| Frontend | React, React Router, Monaco Editor, Yjs, y-monaco, Tailwind CSS, Socket.IO Client |
+| Backend | Node.js, Express, Socket.IO, Joi, JWT, bcrypt, VM2 |
+| Durable data | PostgreSQL, Prisma ORM |
+| Realtime infrastructure | Redis Pub/Sub, Socket.IO Redis adapter, presence and chat storage |
 
 ---
 
-## Project structure
+## Project Structure
 
-```
+```text
+devweave/
+├── frontend/src/
+│   ├── pages/          # Welcome, auth, dashboard, and editor screens
+│   ├── components/     # Monaco, toolbar, cursors, chat, terminal, history
+│   └── services/       # REST, auth, Socket.IO, and Yjs client integration
 ├── backend/
-│   ├── server.js
-│   ├── routes/
-│   │   ├── api.js
-│   │   └── auth.js
-│   ├── middleware/
-│   │   └── auth.js
-│   ├── sockets/
-│   │   ├── handlers/
-│   │   └── subscribers.js
-│   ├── services/
-│   │   ├── authService.js
-│   │   ├── documentService.js
-│   │   └── versionService.js
-│   ├── repositories/
-│   │   └── documentRepository.js
-│   ├── prisma/
-│   │   ├── schema.prisma
-│   │   └── migrations/
-│   ├── lib/
-│   │   └── prisma.js
-│   ├── redis/
-│   └── scripts/
-│       └── migrate-redis-to-postgres.js
-│
-└── frontend/
-    └── src/
-        ├── App.js
-        ├── pages/
-        │   ├── Dashboard.js
-        │   ├── Login.js
-        │   ├── Signup.js
-        │   └── EditorPage.js
-        ├── components/
-        │   ├── Toolbar.js
-        │   └── VersionHistory.js
-        └── services/
-            ├── api.js
-            ├── auth.js
-            └── yjsProvider.js
+│   ├── routes/         # Auth, documents, versions, chat, and execution API
+│   ├── sockets/        # Connection handlers and Redis subscribers
+│   ├── services/       # Collaboration, versions, presence, chat, and execution
+│   ├── repositories/   # Prisma-backed document persistence
+│   ├── prisma/         # Schema and database migrations
+│   └── redis/          # Redis clients and Pub/Sub management
+└── SYSTEM_DESIGN_AND_INTERVIEW_GUIDE.md
 ```
+
+For implementation details, tradeoffs, event flows, and interview talking points, see
+[SYSTEM_DESIGN_AND_INTERVIEW_GUIDE.md](./SYSTEM_DESIGN_AND_INTERVIEW_GUIDE.md).
 
 ---
 
-## Quick start
+## Quick Start
 
 ### Prerequisites
 
 - Node.js 16+
-- PostgreSQL (local or cloud)
-- Redis (local or cloud)
+- PostgreSQL
+- Redis
 
-### Install
+### 1. Install
 
 ```bash
 git clone https://github.com/sahuhasrh/devweave.git
@@ -149,45 +204,33 @@ cd devweave
 npm run install:all
 ```
 
-### Environment
+### 2. Configure
 
 ```bash
 cp .env.example backend/.env
 ```
 
-Edit `backend/.env`:
+Set the required values in `backend/.env`:
 
 ```env
 DATABASE_URL=postgresql://devweave_user:devweave_password@localhost:5432/devweave
-JWT_SECRET=your-secret-key
-
+JWT_SECRET=replace-with-a-long-random-secret
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_TLS=false
-
 PORT=5000
 CLIENT_URL=http://localhost:3000
 ```
 
-### Database setup
+### 3. Prepare the database
 
 ```bash
-# Start PostgreSQL (if needed)
-docker run -d --name devweave-postgres \
-  -e POSTGRES_USER=devweave_user \
-  -e POSTGRES_PASSWORD=devweave_password \
-  -e POSTGRES_DB=devweave \
-  -p 5432:5432 postgres:16-alpine
-
-# Apply schema
 cd backend
 npm run db:migrate
-
-# Optional: migrate existing Redis documents into PostgreSQL
-npm run db:migrate-redis
+cd ..
 ```
 
-### Run
+### 4. Run
 
 ```bash
 # Terminal 1
@@ -197,42 +240,42 @@ npm run dev:backend
 npm run dev:frontend
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to choose Login, Sign up, or Guest. Signed-in users land on `/dashboard`, where they can create, rename, delete, and open owned documents. Guests enter a name and join an existing document through a valid shared link; they cannot create documents.
+Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
 ## API
 
-| Endpoint | Auth | Purpose |
-|----------|------|---------|
-| `GET /api/health` | — | Health check / Redis & DB connectivity |
-| `POST /api/auth/signup` | — | Create account |
-| `POST /api/auth/login` | — | Log in, receive JWT |
-| `GET /api/auth/me` | ✅ | Get current user |
-| `GET /api/documents` | ✅ | List documents owned by the current user, newest updated first |
-| `POST /api/documents` | ✅ | Create an owned document |
-| `GET /api/documents/:id` | optional | Fetch document metadata/content |
-| `PATCH /api/documents/:id` | ✅ (owner) | Update document metadata |
-| `DELETE /api/documents/:id` | ✅ (owner) | Delete a document and its versions |
-| `POST /api/documents/:id/versions` | ✅ (owner) | Save a manual version snapshot |
-| `GET /api/documents/:id/history` | ✅ (owner) | List version history |
-| `POST /api/documents/:id/versions/:versionId/restore` | ✅ (owner) | Restore a version and broadcast to all collaborators |
-
-See `backend/routes/api.js` and `backend/routes/auth.js` for full details.
+| Endpoint | Access | Purpose |
+|---|---|---|
+| `POST /api/auth/signup` | Public | Create an account and receive a JWT |
+| `POST /api/auth/login` | Public | Log in and receive a JWT |
+| `GET /api/auth/me` | Authenticated | Get the current user |
+| `GET /api/documents` | Authenticated | List documents owned by the current user |
+| `POST /api/documents` | Authenticated | Create a document |
+| `GET /api/documents/:id` | Public / optional auth | Fetch a document |
+| `PATCH /api/documents/:id` | Owner | Rename or update a document |
+| `DELETE /api/documents/:id` | Owner | Delete a document and its versions |
+| `POST /api/documents/:id/versions` | Owner | Save a version snapshot |
+| `GET /api/documents/:id/history` | Owner | List version history |
+| `POST /api/documents/:id/versions/:versionId/restore` | Owner | Restore and broadcast a version |
+| `POST /api/execute` | Public | Execute JavaScript in the server sandbox |
 
 ---
 
-## How it works
+## Key Design Decisions
 
-- **Collaboration**: Monaco ↔ `y-monaco` ↔ `Y.Doc` ↔ Socket.IO ↔ document handlers ↔ document service, with Redis Pub/Sub fanning out updates across server instances.
-- **Dashboard**: Authenticated users fetch `GET /api/documents`, see owned documents ordered by `updatedAt`, and can create, rename, delete, or open each document at `/?doc=<id>`.
-- **Persistence**: Documents are stored in PostgreSQL with a `content` snapshot, base64-encoded `yjsState` (for reload after restart), and a `version` counter used as a stale-update guard.
-- **Auto-save**: When the first user joins a document, a 5-minute auto-snapshot timer starts, capturing version history without manual action.
-- **Restore**: Restoring a version updates the live server-side `Y.Doc`, persists its full encoded Yjs state, then rebroadcasts that authoritative state via `yjs:sync` so collaboration continues without reload.
-- **Guest access**: Link-based collaboration (`?doc=<uuid>`) works without an account for existing documents. Missing document ids are rejected, so creation always goes through the authenticated document API.
+| Decision | Why |
+|---|---|
+| Yjs instead of full-document sync | Concurrent edits merge deterministically instead of overwriting one another |
+| Custom Socket.IO Yjs provider | Keeps document updates on the same transport as cursors, presence, and chat |
+| PostgreSQL for durable state | Supports ownership, ordered history, relational queries, and restart recovery |
+| Redis for ephemeral state and fan-out | Keeps high-frequency realtime traffic away from the durable database |
+| Separate cursor channel | Cursor movement stays lightweight and does not become document history |
+| Debounced persistence | Batches rapid keystrokes while retaining a recent durable CRDT snapshot |
 
 ---
 
 ## License
 
-[MIT](./LICENSE)
+Released under the [MIT License](./LICENSE).
