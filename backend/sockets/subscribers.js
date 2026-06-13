@@ -30,6 +30,10 @@ function registerRedisSubscribers(io, redisManager) {
   redisManager.subscribe('chat:messages', (message) => {
     io.to(`doc:${message.documentId}`).emit('chat:message', message);
   });
+
+  redisManager.subscribe('document:restore', (message) => {
+    io.to(`doc:${message.documentId}`).emit('yjs:sync', message);
+  });
 }
 
 module.exports = { registerRedisSubscribers };

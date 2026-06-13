@@ -1,5 +1,5 @@
 const Y = require('yjs');
-const redisManager = require('../redis/client');
+const documentRepository = require('../repositories/documentRepository');
 const { encodeUpdate, decodeUpdate } = require('../utils/encoding');
 const { DEFAULT_DOCUMENT_CONTENT, YJS_TEXT_KEY } = require('../models/document');
 
@@ -9,7 +9,7 @@ const { DEFAULT_DOCUMENT_CONTENT, YJS_TEXT_KEY } = require('../models/document')
  * CRDT flow:
  * 1. Each room has one in-memory Y.Doc (source of truth while server is up).
  * 2. Incoming yjs:update payloads are applied with Y.applyUpdate.
- * 3. Merged state is persisted to Redis (yjsState + content snapshot + version).
+ * 3. Merged state is persisted to PostgreSQL (yjsState + content snapshot + version).
  * 4. Updates are published on Redis Pub/Sub so every Node instance stays consistent.
  */
 class DocumentService {
@@ -25,7 +25,7 @@ class DocumentService {
     }
 
     const ydoc = new Y.Doc();
-    const stored = await redisManager.getDocument(documentId);
+    const stored = await documentRepository.findById(documentId);
     let version = stored?.version ?? 0;
 
     if (stored?.yjsState) {
@@ -110,7 +110,7 @@ class DocumentService {
 
     entry.persistTimer = setTimeout(async () => {
       try {
-        await redisManager.saveDocument(documentId, {
+        await documentRepository.save(documentId, {
           yjsState: fullStateEncoded,
           content,
           version: entry.version,
@@ -121,14 +121,6 @@ class DocumentService {
     }, this.PERSIST_DEBOUNCE_MS);
   }
 
-  async recordOperation(documentId, userId, operationType = 'yjs-update') {
-    await redisManager.addOperation(documentId, {
-      type: operationType,
-      userId,
-      position: {},
-      content: '',
-    });
-  }
 }
 
 module.exports = new DocumentService();

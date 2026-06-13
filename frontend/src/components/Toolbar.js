@@ -9,12 +9,18 @@ import {
   Copy,
   Play,
   Link2,
+  Save,
+  History,
 } from 'lucide-react';
 
 const Toolbar = ({
   onNewDocument,
   onCopyUrl,
   copyUrlFeedback,
+  onSaveVersion,
+  versionFeedback,
+  onToggleVersionHistory,
+  showVersionHistory,
   onToggleChat,
   onToggleTheme,
   onExecuteCode,
@@ -29,6 +35,22 @@ const Toolbar = ({
         label="New Document"
         onClick={onNewDocument}
         tooltip="Create a new document"
+      />
+
+      <ToolbarButton
+        icon={<Save className="w-4 h-4" />}
+        label={versionFeedback || 'Save Version'}
+        onClick={onSaveVersion}
+        isActive={!!versionFeedback}
+        tooltip="Save a snapshot of the current document"
+      />
+
+      <ToolbarButton
+        icon={<History className="w-4 h-4" />}
+        label="History"
+        onClick={onToggleVersionHistory}
+        isActive={showVersionHistory}
+        tooltip="View and restore saved versions"
       />
 
       <ToolbarButton

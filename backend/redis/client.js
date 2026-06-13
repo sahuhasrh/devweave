@@ -93,50 +93,6 @@ class RedisManager {
     }
   }
 
-  async saveDocument(documentId, payload) {
-    const document = {
-      id: documentId,
-      ...payload,
-      lastModified: Date.now(),
-    };
-    await this.setJson(`doc:${documentId}`, document);
-    return document;
-  }
-
-  async getDocument(documentId) {
-    return this.getJson(`doc:${documentId}`);
-  }
-
-  async getDocumentVersion(documentId) {
-    const doc = await this.getDocument(documentId);
-    return doc?.version ?? 0;
-  }
-
-  async addOperation(documentId, operation) {
-    const operationData = {
-      type: operation.type,
-      position: JSON.stringify(operation.position || {}),
-      content: operation.content || '',
-      userId: operation.userId,
-      timestamp: Date.now().toString(),
-    };
-    return this.client.xAdd(`ops:${documentId}`, '*', operationData);
-  }
-
-  async getOperations(documentId, fromId = '-', count = 100) {
-    try {
-      const operations = await this.client.xRange(`ops:${documentId}`, fromId, '+', { COUNT: count });
-      return operations.map((op) => ({
-        id: op.id,
-        ...op.message,
-        position: JSON.parse(op.message.position || '{}'),
-        timestamp: parseInt(op.message.timestamp, 10),
-      }));
-    } catch {
-      return [];
-    }
-  }
-
   async addUserToRoom(roomId, userId, userInfo) {
     await this.client.hSet(`room:${roomId}:users`, userId, JSON.stringify({
       ...userInfo,

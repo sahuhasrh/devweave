@@ -5,14 +5,21 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:migrate-redis": "node scripts/migrate-redis-to-postgres.js"
   },
   "dependencies": {
+    "@prisma/client": "^5.22.0",
     "@socket.io/redis-adapter": "^8.3.0",
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.3",
     "redis": "^4.6.12",
     "socket.io": "^4.7.5",
     "uuid": "^9.0.1",
@@ -20,6 +27,7 @@
     "yjs": "^13.6.30"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.2",
+    "prisma": "^5.22.0"
   }
 }

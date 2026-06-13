@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const documentService = require('../../services/documentService');
 const presenceService = require('../../services/presenceService');
 const redisManager = require('../../redis/client');
+const versionService = require('../../services/versionService');
 const { createUserInfo } = require('../../models/user');
 const { setConnection, getConnection } = require('../connectionRegistry');
 
@@ -34,6 +35,8 @@ function registerDocumentHandlers(io, socket) {
       // Initial Yjs state for CRDT binding on the client
       socket.emit('yjs:sync', syncPayload);
 
+      versionService.startAutoSnapshot(documentId);
+
       console.log(`User ${userInfo.name} joined document ${documentId}`);
     } catch (error) {
       console.error('Error joining document:', error);
@@ -55,8 +58,6 @@ function registerDocumentHandlers(io, socket) {
 
       const result = await documentService.applyUpdate(documentId, update, clientVersion);
       if (!result) return;
-
-      await documentService.recordOperation(documentId, userId);
 
       const changeMessage = {
         ...result,

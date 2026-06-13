@@ -28,6 +28,16 @@ export function createYjsProvider(ydoc, socket, documentId, userId) {
   const onSync = (payload) => {
     if (payload.documentId && payload.documentId !== documentId) return;
     serverVersion = payload.version || 0;
+
+    if (payload.restored) {
+      const ytext = ydoc.getText('monaco');
+      ydoc.transact(() => {
+        ytext.delete(0, ytext.length);
+        ytext.insert(0, payload.content || '');
+      }, REMOTE_ORIGIN);
+      return;
+    }
+
     Y.applyUpdate(ydoc, decodeUpdate(payload.update), REMOTE_ORIGIN);
   };
 
