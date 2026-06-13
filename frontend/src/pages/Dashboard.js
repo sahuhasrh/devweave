@@ -104,7 +104,7 @@ function Dashboard() {
             </span>
             <div>
               <h1 className="text-xl font-bold text-gray-900">My Documents</h1>
-              <p className="text-sm text-gray-500">Logged in as {user?.email}</p>
+              <p className="text-sm text-gray-500">Logged in as {user?.name}</p>
             </div>
           </div>
 

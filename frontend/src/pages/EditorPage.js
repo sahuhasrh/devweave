@@ -11,7 +11,7 @@ import UserModal from '../components/UserModal';
 import VersionHistory from '../components/VersionHistory';
 import socketService from '../services/socket';
 import { api } from '../services/api';
-import { getStoredUser, clearAuth, isAuthenticated } from '../services/auth';
+import { getStoredUser, clearAuth } from '../services/auth';
 import '../index.css';
 
 function EditorPage() {
@@ -41,13 +41,9 @@ function EditorPage() {
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const docId = urlParams.get('doc') || uuidv4();
+    const docId = urlParams.get('doc');
+    if (!docId) return undefined;
     setDocumentId(docId);
-
-    if (!urlParams.get('doc')) {
-      const newUrl = `${window.location.pathname}?doc=${docId}`;
-      window.history.replaceState({}, '', newUrl);
-    }
 
     socketService.connect();
 
@@ -68,12 +64,28 @@ function EditorPage() {
 
     const userInfo = {
       id: authUser.id,
-      name: authUser.email,
+      name: authUser.name,
     };
     setUser(userInfo);
     setShowUserModal(false);
     socketService.joinDocument(documentId, userInfo);
   }, [documentId, authUser, showUserModal]);
+
+  useEffect(() => {
+    if (!documentId || authUser || !showUserModal) return;
+
+    const rawGuest = sessionStorage.getItem('devweave_guest');
+    if (!rawGuest) return;
+
+    try {
+      const guest = JSON.parse(rawGuest);
+      if (!guest.name) return;
+      handleUserSubmit({ name: guest.name });
+      sessionStorage.removeItem('devweave_guest');
+    } catch {
+      sessionStorage.removeItem('devweave_guest');
+    }
+  }, [documentId, authUser, showUserModal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!documentId) return;
@@ -171,18 +183,14 @@ function EditorPage() {
   };
 
   const handleNewDocument = async () => {
-    if (isAuthenticated()) {
-      try {
-        const created = await api.createDocument('Untitled Document');
-        window.location.href = `${window.location.pathname}?doc=${created.id}`;
-        return;
-      } catch (error) {
-        console.error('Failed to create document:', error);
-      }
-    }
+    if (!authUser) return;
 
-    const newDocId = uuidv4();
-    window.location.href = `${window.location.pathname}?doc=${newDocId}`;
+    try {
+      const created = await api.createDocument('Untitled Document');
+      window.location.href = `${window.location.pathname}?doc=${created.id}`;
+    } catch (error) {
+      console.error('Failed to create document:', error);
+    }
   };
 
   const handleSaveVersion = async () => {
@@ -206,6 +214,7 @@ function EditorPage() {
     clearAuth();
     setAuthUser(null);
     setShowVersionHistory(false);
+    window.location.href = '/';
   };
 
   const handleCopyUrl = useCallback(() => {
@@ -217,6 +226,30 @@ function EditorPage() {
       setTimeout(() => setCopyUrlFeedback(''), 2000);
     });
   }, []);
+
+  const handleCopyContent = useCallback(() => {
+    navigator.clipboard.writeText(document?.content || '').then(() => {
+      setCopyUrlFeedback('Content copied!');
+      setTimeout(() => setCopyUrlFeedback(''), 2000);
+    }).catch(() => {
+      setCopyUrlFeedback('Copy failed');
+      setTimeout(() => setCopyUrlFeedback(''), 2000);
+    });
+  }, [document?.content]);
+
+  const handleDownloadDocument = useCallback(() => {
+    const title = document?.title || 'Untitled Document';
+    const safeTitle = title.replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '') || 'document';
+    const blob = new Blob([document?.content || ''], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = window.document.createElement('a');
+    link.href = url;
+    link.download = `${safeTitle}.txt`;
+    window.document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }, [document?.content, document?.title]);
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'vs-dark' ? 'light' : 'vs-dark'));
@@ -290,7 +323,7 @@ function EditorPage() {
             <div className="flex items-center gap-2 text-sm">
               {authUser ? (
                 <>
-                  <span className="text-gray-600">{authUser.email}</span>
+                  <span className="text-gray-600">{authUser.name}</span>
                   <Link to="/dashboard" className="text-gray-600 hover:text-gray-800">
                     Dashboard
                   </Link>
@@ -324,10 +357,13 @@ function EditorPage() {
               onToggleChat={() => setShowChat(!showChat)}
               onToggleTheme={toggleTheme}
               onExecuteCode={handleExecuteCode}
+              onDownloadDocument={handleDownloadDocument}
+              onCopyContent={handleCopyContent}
               theme={theme}
               showChat={showChat}
               isExecuting={isExecuting}
               showVersionControls={canManageVersions}
+              canCreateDocument={Boolean(authUser)}
             />
           </div>
         </div>

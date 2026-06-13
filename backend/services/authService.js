@@ -25,7 +25,8 @@ function verifyToken(token) {
   return jwt.verify(token, getJwtSecret());
 }
 
-async function signup(email, password) {
+async function signup(name, email, password) {
+  const trimmedName = name.trim();
   const normalizedEmail = email.trim().toLowerCase();
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) {
@@ -36,8 +37,8 @@ async function signup(email, password) {
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const user = await prisma.user.create({
-    data: { email: normalizedEmail, passwordHash },
-    select: { id: true, email: true, createdAt: true },
+    data: { name: trimmedName, email: normalizedEmail, passwordHash },
+    select: { id: true, name: true, email: true, createdAt: true },
   });
 
   return { user, token: signToken(user) };
@@ -60,7 +61,12 @@ async function login(email, password) {
   }
 
   return {
-    user: { id: user.id, email: user.email, createdAt: user.createdAt },
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      createdAt: user.createdAt,
+    },
     token: signToken(user),
   };
 }
@@ -68,7 +74,7 @@ async function login(email, password) {
 async function getUserById(userId) {
   return prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, createdAt: true },
+    select: { id: true, name: true, email: true, createdAt: true },
   });
 }
 

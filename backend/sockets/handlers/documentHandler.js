@@ -3,6 +3,7 @@ const documentService = require('../../services/documentService');
 const presenceService = require('../../services/presenceService');
 const redisManager = require('../../redis/client');
 const versionService = require('../../services/versionService');
+const documentRepository = require('../../repositories/documentRepository');
 const { createUserInfo } = require('../../models/user');
 const { setConnection, getConnection } = require('../connectionRegistry');
 
@@ -10,6 +11,12 @@ function registerDocumentHandlers(io, socket) {
   socket.on('join:document', async (data) => {
     try {
       const { documentId, user } = data;
+      const storedDocument = await documentRepository.findById(documentId);
+      if (!storedDocument) {
+        socket.emit('error', { message: 'Document not found. Ask the owner for a valid link.' });
+        return;
+      }
+
       const userId = user.id || uuidv4();
       const userInfo = createUserInfo(user, userId);
 

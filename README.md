@@ -7,14 +7,15 @@
 ## ✨ Highlights
 
 - **Conflict-free collaborative editing** — Yjs CRDT + `y-monaco` keep every collaborator's cursor and edits in sync without merge conflicts
-- **Authentication** — JWT-based signup/login with bcrypt password hashing; logged-in users get persisted, ownable documents
+- **Authentication** — JWT-based signup/login with bcrypt password hashing; accounts store a real display name used in collaboration presence
 - **My Documents dashboard** — Logged-in users land on `/dashboard`, can list owned documents, rename them, delete them, or create a new document
 - **Persistent storage** — Documents, users, and version history now live in **PostgreSQL** (via Prisma), replacing the old Redis-only model
 - **Version history** — Owner-only manual "Save Version" snapshots, automatic 5-minute auto-snapshots, and one-click restore that broadcasts the authoritative Yjs state to all collaborators live
 - **Live presence & cursors** — See who's in the room and where their cursor is, in real time
 - **Room chat** — Built-in chat per document
 - **In-browser JS execution** — Run code sandboxed with VM2, no local setup needed
-- **Anonymous or authenticated use** — Share a `?doc=<uuid>` link for instant anonymous collaboration, or sign in to own and manage your documents
+- **Welcome flow** — First visit offers Login, Sign up, or Guest; guests enter a display name and join an existing shared document
+- **Authenticated creation** — Only logged-in users can create documents; guests can collaborate through valid owner-created links
 - **Scale-out ready** — Redis Pub/Sub + Socket.IO adapter support multi-instance deployments
 
 ---
@@ -196,7 +197,7 @@ npm run dev:backend
 npm run dev:frontend
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Sign up or log in to land on `/dashboard`, where you can create, rename, delete, and open owned documents. You can still open `?doc=<uuid>` directly to collaborate anonymously via shareable link.
+Open [http://localhost:3000](http://localhost:3000) to choose Login, Sign up, or Guest. Signed-in users land on `/dashboard`, where they can create, rename, delete, and open owned documents. Guests enter a name and join an existing document through a valid shared link; they cannot create documents.
 
 ---
 
@@ -228,7 +229,7 @@ See `backend/routes/api.js` and `backend/routes/auth.js` for full details.
 - **Persistence**: Documents are stored in PostgreSQL with a `content` snapshot, base64-encoded `yjsState` (for reload after restart), and a `version` counter used as a stale-update guard.
 - **Auto-save**: When the first user joins a document, a 5-minute auto-snapshot timer starts, capturing version history without manual action.
 - **Restore**: Restoring a version updates the live server-side `Y.Doc`, persists its full encoded Yjs state, then rebroadcasts that authoritative state via `yjs:sync` so collaboration continues without reload.
-- **Anonymous access preserved**: Link-based collaboration (`?doc=<uuid>`) still works without an account; authentication is only required for owning/managing documents, delete/rename, and version history via REST.
+- **Guest access**: Link-based collaboration (`?doc=<uuid>`) works without an account for existing documents. Missing document ids are rejected, so creation always goes through the authenticated document API.
 
 ---
 

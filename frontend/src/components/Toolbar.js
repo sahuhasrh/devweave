@@ -24,19 +24,24 @@ const Toolbar = ({
   onToggleChat,
   onToggleTheme,
   onExecuteCode,
+  onDownloadDocument,
+  onCopyContent,
   theme,
   showChat,
   isExecuting,
   showVersionControls = true,
+  canCreateDocument = false,
 }) => {
   return (
     <div className="flex items-center space-x-2">
-      <ToolbarButton
-        icon={<FileText className="w-4 h-4" />}
-        label="New Document"
-        onClick={onNewDocument}
-        tooltip="Create a new document"
-      />
+      {canCreateDocument && (
+        <ToolbarButton
+          icon={<FileText className="w-4 h-4" />}
+          label="New Document"
+          onClick={onNewDocument}
+          tooltip="Create a new document"
+        />
+      )}
 
       {showVersionControls && (
         <>
@@ -97,7 +102,10 @@ const Toolbar = ({
 
       <div className="w-px h-6 bg-gray-300" />
 
-      <DropdownMenu />
+      <DropdownMenu
+        onDownloadDocument={onDownloadDocument}
+        onCopyContent={onCopyContent}
+      />
     </div>
   );
 };
@@ -124,7 +132,7 @@ const ToolbarButton = ({
   </button>
 );
 
-const DropdownMenu = () => {
+const DropdownMenu = ({ onDownloadDocument, onCopyContent }) => {
   const [isOpen, setIsOpen] = React.useState(false);
   const dropdownRef = React.useRef(null);
 
@@ -153,8 +161,22 @@ const DropdownMenu = () => {
 
       {isOpen && (
         <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-          <DropdownItem icon={<Download className="w-4 h-4" />} label="Export Document" onClick={() => setIsOpen(false)} />
-          <DropdownItem icon={<Copy className="w-4 h-4" />} label="Copy Content" onClick={() => setIsOpen(false)} />
+          <DropdownItem
+            icon={<Download className="w-4 h-4" />}
+            label="Download Document"
+            onClick={() => {
+              onDownloadDocument?.();
+              setIsOpen(false);
+            }}
+          />
+          <DropdownItem
+            icon={<Copy className="w-4 h-4" />}
+            label="Copy Content"
+            onClick={() => {
+              onCopyContent?.();
+              setIsOpen(false);
+            }}
+          />
           <div className="border-t border-gray-100 my-1" />
           <DropdownItem icon={<Users className="w-4 h-4" />} label="Keyboard Shortcuts" onClick={() => setIsOpen(false)} />
         </div>
