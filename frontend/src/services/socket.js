@@ -8,7 +8,7 @@ class SocketService {
     this.pendingYjsSync = null;
   }
 
-  connect(serverUrl = process.env.REACT_APP_WS_URL || 'http://localhost:5002') {
+  connect(serverUrl = process.env.REACT_APP_WS_URL || 'http://localhost:5000') {
     if (this.socket) {
       this.disconnect();
     }

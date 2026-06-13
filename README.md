@@ -105,7 +105,7 @@ Edit `backend/.env`:
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_TLS=false
-PORT=5002
+PORT=5000
 CLIENT_URL=http://localhost:3000
 ```
 
