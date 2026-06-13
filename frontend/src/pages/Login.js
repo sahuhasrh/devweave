@@ -18,7 +18,7 @@ function Login() {
     try {
       const { token, user } = await api.login(email, password);
       setAuth(token, user);
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       setError(err.message || 'Login failed');
     } finally {

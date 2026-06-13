@@ -47,7 +47,18 @@ export const api = {
     body: JSON.stringify({ title }),
   }),
 
+  listDocuments: () => request('/api/documents'),
+
   getDocument: (id) => request(`/api/documents/${id}`),
+
+  updateDocument: (id, data) => request(`/api/documents/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
+
+  deleteDocument: (id) => request(`/api/documents/${id}`, {
+    method: 'DELETE',
+  }),
 
   saveVersion: (documentId) => request(`/api/documents/${documentId}/versions`, {
     method: 'POST',

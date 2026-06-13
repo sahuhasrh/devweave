@@ -121,6 +121,49 @@ class DocumentService {
     }, this.PERSIST_DEBOUNCE_MS);
   }
 
+  async restoreContent(documentId, content) {
+    const entry = await this.getOrCreateDocument(documentId);
+
+    if (entry.persistTimer) {
+      clearTimeout(entry.persistTimer);
+      entry.persistTimer = null;
+    }
+
+    const ytext = entry.ydoc.getText(YJS_TEXT_KEY);
+    entry.ydoc.transact(() => {
+      ytext.delete(0, ytext.length);
+      ytext.insert(0, content);
+    }, 'restore');
+
+    entry.version += 1;
+    const fullState = encodeUpdate(Y.encodeStateAsUpdate(entry.ydoc));
+
+    await documentRepository.save(documentId, {
+      yjsState: fullState,
+      content,
+      version: entry.version,
+    });
+
+    return {
+      documentId,
+      update: fullState,
+      version: entry.version,
+      content,
+      lastModified: Date.now(),
+      restored: true,
+    };
+  }
+
+  removeFromCache(documentId) {
+    const entry = this.liveDocs.get(documentId);
+    if (!entry) return;
+
+    if (entry.persistTimer) {
+      clearTimeout(entry.persistTimer);
+    }
+    entry.ydoc.destroy();
+    this.liveDocs.delete(documentId);
+  }
 }
 
 module.exports = new DocumentService();

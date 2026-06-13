@@ -1,9 +1,6 @@
-const Y = require('yjs');
 const prisma = require('../lib/prisma');
 const documentRepository = require('../repositories/documentRepository');
 const documentService = require('../services/documentService');
-const { YJS_TEXT_KEY } = require('../models/document');
-const { encodeUpdate } = require('../utils/encoding');
 
 const AUTO_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -64,7 +61,7 @@ class VersionService {
   }
 
   /**
-   * Restore a version: update in-memory Y.Doc, persist to PostgreSQL, return sync payload.
+   * Restore a version: update the server-authoritative Y.Doc, persist it, return sync payload.
    */
   async restoreVersion(documentId, versionId) {
     const version = await prisma.documentVersion.findFirst({
@@ -76,33 +73,14 @@ class VersionService {
       throw error;
     }
 
-    const entry = await documentService.getOrCreateDocument(documentId);
-    const ytext = entry.ydoc.getText(YJS_TEXT_KEY);
-    ytext.delete(0, ytext.length);
-    ytext.insert(0, version.content);
-
-    entry.version += 1;
-    const mergedUpdate = encodeUpdate(Y.encodeStateAsUpdate(entry.ydoc));
-
-    await documentRepository.save(documentId, {
-      yjsState: mergedUpdate,
-      content: version.content,
-      version: entry.version,
-    });
+    const syncPayload = await documentService.restoreContent(documentId, version.content);
 
     const autoState = this.autoSnapshotState.get(documentId);
     if (autoState) {
       autoState.lastContent = version.content;
     }
 
-    return {
-      documentId,
-      update: mergedUpdate,
-      version: entry.version,
-      content: version.content,
-      lastModified: Date.now(),
-      restored: true,
-    };
+    return syncPayload;
   }
 }
 

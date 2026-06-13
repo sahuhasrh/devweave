@@ -5,6 +5,20 @@ class DocumentRepository {
     return prisma.document.findUnique({ where: { id: documentId } });
   }
 
+  async findByOwner(ownerId) {
+    return prisma.document.findMany({
+      where: { ownerId },
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        ownerId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
   async save(documentId, { yjsState, content, version, title, ownerId }) {
     const data = {
       content,
@@ -35,6 +49,10 @@ class DocumentRepository {
         createdAt: true,
       },
     });
+  }
+
+  async delete(documentId) {
+    return prisma.document.delete({ where: { id: documentId } });
   }
 }
 

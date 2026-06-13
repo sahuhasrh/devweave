@@ -27,6 +27,7 @@ const Toolbar = ({
   theme,
   showChat,
   isExecuting,
+  showVersionControls = true,
 }) => {
   return (
     <div className="flex items-center space-x-2">
@@ -37,21 +38,25 @@ const Toolbar = ({
         tooltip="Create a new document"
       />
 
-      <ToolbarButton
-        icon={<Save className="w-4 h-4" />}
-        label={versionFeedback || 'Save Version'}
-        onClick={onSaveVersion}
-        isActive={!!versionFeedback}
-        tooltip="Save a snapshot of the current document"
-      />
+      {showVersionControls && (
+        <>
+          <ToolbarButton
+            icon={<Save className="w-4 h-4" />}
+            label={versionFeedback || 'Save Version'}
+            onClick={onSaveVersion}
+            isActive={!!versionFeedback}
+            tooltip="Save a snapshot of the current document"
+          />
 
-      <ToolbarButton
-        icon={<History className="w-4 h-4" />}
-        label="History"
-        onClick={onToggleVersionHistory}
-        isActive={showVersionHistory}
-        tooltip="View and restore saved versions"
-      />
+          <ToolbarButton
+            icon={<History className="w-4 h-4" />}
+            label="History"
+            onClick={onToggleVersionHistory}
+            isActive={showVersionHistory}
+            tooltip="View and restore saved versions"
+          />
+        </>
+      )}
 
       <ToolbarButton
         icon={<Link2 className="w-4 h-4" />}

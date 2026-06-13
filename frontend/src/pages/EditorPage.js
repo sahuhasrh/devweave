@@ -37,6 +37,8 @@ function EditorPage() {
     currentUserIdRef.current = user?.id ?? null;
   }, [user?.id]);
 
+  const canManageVersions = Boolean(authUser && document?.ownerId === authUser.id);
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const docId = urlParams.get('doc') || uuidv4();
@@ -61,12 +63,45 @@ function EditorPage() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!documentId || !authUser || !showUserModal) return;
+
+    const userInfo = {
+      id: authUser.id,
+      name: authUser.email,
+    };
+    setUser(userInfo);
+    setShowUserModal(false);
+    socketService.joinDocument(documentId, userInfo);
+  }, [documentId, authUser, showUserModal]);
+
+  useEffect(() => {
+    if (!documentId) return;
+
+    let cancelled = false;
+    api.getDocument(documentId)
+      .then((doc) => {
+        if (!cancelled) {
+          setDocument((prev) => ({ ...prev, ...doc }));
+        }
+      })
+      .catch((error) => {
+        if (error.status !== 404) {
+          console.error('Failed to fetch document metadata:', error);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [documentId]);
+
   const handleConnectionStatus = ({ connected }) => {
     setIsConnected(connected);
   };
 
   const handleDocumentLoaded = ({ document: doc, users: roomUsers, userId }) => {
-    setDocument(doc);
+    setDocument((prev) => ({ ...prev, ...doc }));
     setUsers(roomUsers);
     setUser((prev) => ({ ...prev, id: userId }));
   };
@@ -151,6 +186,8 @@ function EditorPage() {
   };
 
   const handleSaveVersion = async () => {
+    if (!canManageVersions) return;
+
     try {
       const result = await api.saveVersion(documentId);
       if (result.skipped) {
@@ -168,6 +205,7 @@ function EditorPage() {
   const handleLogout = () => {
     clearAuth();
     setAuthUser(null);
+    setShowVersionHistory(false);
   };
 
   const handleCopyUrl = useCallback(() => {
@@ -240,7 +278,9 @@ function EditorPage() {
               </span>
               <div>
                 <h1 className="text-xl font-bold text-gray-900 leading-tight">DevWeave</h1>
-                <p className="text-xs text-gray-500">Real-time collaborative editor</p>
+                <p className="text-xs text-gray-500">
+                  {document?.title || 'Real-time collaborative editor'}
+                </p>
               </div>
             </div>
             <ConnectionStatus isConnected={isConnected} />
@@ -251,6 +291,9 @@ function EditorPage() {
               {authUser ? (
                 <>
                   <span className="text-gray-600">{authUser.email}</span>
+                  <Link to="/dashboard" className="text-gray-600 hover:text-gray-800">
+                    Dashboard
+                  </Link>
                   <button
                     onClick={handleLogout}
                     className="text-indigo-600 hover:text-indigo-800 font-medium"
@@ -284,6 +327,7 @@ function EditorPage() {
               theme={theme}
               showChat={showChat}
               isExecuting={isExecuting}
+              showVersionControls={canManageVersions}
             />
           </div>
         </div>
@@ -332,11 +376,13 @@ function EditorPage() {
           </div>
         )}
 
-        <VersionHistory
-          documentId={documentId}
-          isOpen={showVersionHistory}
-          onClose={() => setShowVersionHistory(false)}
-        />
+        {canManageVersions && (
+          <VersionHistory
+            documentId={documentId}
+            isOpen={showVersionHistory}
+            onClose={() => setShowVersionHistory(false)}
+          />
+        )}
       </div>
 
       <footer className="bg-white border-t border-gray-200 px-4 py-2">

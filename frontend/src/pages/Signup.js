@@ -18,7 +18,7 @@ function Signup() {
     try {
       const { token, user } = await api.signup(email, password);
       setAuth(token, user);
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       setError(err.message || 'Signup failed');
     } finally {

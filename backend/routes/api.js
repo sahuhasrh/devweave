@@ -17,6 +17,35 @@ router.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: Date.now() });
 });
 
+async function getOwnedDocument(req, res) {
+  const document = await documentRepository.findById(req.params.id);
+  if (!document) {
+    res.status(404).json({ error: 'Document not found' });
+    return null;
+  }
+  if (document.ownerId !== req.user.id) {
+    res.status(403).json({ error: 'Not authorized for this document' });
+    return null;
+  }
+  return document;
+}
+
+router.get('/documents', requireAuth, async (req, res) => {
+  try {
+    const documents = await documentRepository.findByOwner(req.user.id);
+    res.json(documents.map((document) => ({
+      id: document.id,
+      title: document.title || 'Untitled Document',
+      ownerId: document.ownerId,
+      createdAt: document.createdAt,
+      updatedAt: document.updatedAt,
+      lastModified: document.updatedAt.getTime(),
+    })));
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch documents' });
+  }
+});
+
 router.post('/documents', requireAuth, async (req, res) => {
   try {
     const { title } = req.body;
@@ -39,6 +68,8 @@ router.post('/documents', requireAuth, async (req, res) => {
       title: document.title,
       ownerId: document.ownerId,
       createdAt: document.createdAt,
+      updatedAt: document.updatedAt,
+      lastModified: document.updatedAt.getTime(),
     });
   } catch {
     res.status(500).json({ error: 'Failed to create document' });
@@ -66,13 +97,8 @@ router.get('/documents/:id', optionalAuth, async (req, res) => {
 
 router.patch('/documents/:id', requireAuth, async (req, res) => {
   try {
-    const document = await documentRepository.findById(req.params.id);
-    if (!document) {
-      return res.status(404).json({ error: 'Document not found' });
-    }
-    if (document.ownerId && document.ownerId !== req.user.id) {
-      return res.status(403).json({ error: 'Not authorized to edit this document' });
-    }
+    const document = await getOwnedDocument(req, res);
+    if (!document) return;
 
     const { title } = req.body;
     if (title === undefined) {
@@ -98,8 +124,26 @@ router.patch('/documents/:id', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/documents/:id/history', async (req, res) => {
+router.delete('/documents/:id', requireAuth, async (req, res) => {
   try {
+    const document = await getOwnedDocument(req, res);
+    if (!document) return;
+
+    documentService.removeFromCache(req.params.id);
+    versionService.stopAutoSnapshot(req.params.id);
+    await documentRepository.delete(req.params.id);
+
+    res.status(204).send();
+  } catch {
+    res.status(500).json({ error: 'Failed to delete document' });
+  }
+});
+
+router.get('/documents/:id/history', requireAuth, async (req, res) => {
+  try {
+    const document = await getOwnedDocument(req, res);
+    if (!document) return;
+
     const versions = await versionService.listVersions(req.params.id);
     res.json(versions);
   } catch {
@@ -107,10 +151,13 @@ router.get('/documents/:id/history', async (req, res) => {
   }
 });
 
-router.post('/documents/:id/versions', async (req, res) => {
+router.post('/documents/:id/versions', requireAuth, async (req, res) => {
   try {
+    const document = await getOwnedDocument(req, res);
+    if (!document) return;
+
     const content = documentService.getContentSnapshot(req.params.id)
-      || (await documentRepository.findById(req.params.id))?.content
+      || document.content
       || '';
 
     const version = await versionService.createSnapshot(req.params.id, content);
@@ -124,8 +171,11 @@ router.post('/documents/:id/versions', async (req, res) => {
   }
 });
 
-router.post('/documents/:id/versions/:versionId/restore', async (req, res) => {
+router.post('/documents/:id/versions/:versionId/restore', requireAuth, async (req, res) => {
   try {
+    const document = await getOwnedDocument(req, res);
+    if (!document) return;
+
     const syncPayload = await versionService.restoreVersion(
       req.params.id,
       req.params.versionId,
